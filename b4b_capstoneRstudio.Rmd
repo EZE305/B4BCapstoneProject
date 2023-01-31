@@ -1,0 +1,309 @@
+---
+title: "B4B_Game_Analysis"
+author: "Emmanuel Duarte"
+date: "2023-01-19"
+output: html_document
+---
+
+```{r}
+#You'll need to install tidyverse package to use functions and make charts. Uncomment it out (remove the hashtag) and run it. Then comment it out again. You'll need to run the DF a few times throughout looking at the project. 
+#install.packages("tidyverse")
+library(tidyverse)
+library(jsonlite)
+#This is the function to upload the JSON file. I named them the same as you did. I would suggest you name them the same as I do so you don't have to change anything in the code, just the source. They use double back slashes to find the file, and "<-" whenever you're assigning a variable. 
+b4b1000 <- fromJSON("C:\\Users\\Owner\\OneDrive\\Desktop\\b4b_Project\\b4b-1000.json")
+
+#If you want to view the file in a pretty and tabular way it needs to be a Dataframe datatype. If it's a table you can just put the name of the table and the output will come out below. 
+#View(b4b1000)
+
+
+```
+The data on hand is somewhat complicated. It has nested dictionaries and lists. A single row contains all of the "events" (moves/plays made throughout the course of a turn). I will first attempt to answer all the questions I can where I don't need to unnest these dictionaries. 
+
+```{r}
+#In this prototype game-play it has been simplified by only having two players playing against each other. The player choices are random, meaning that the win rates for any of the players should be 50/50. The difference between players is only that Alpha goes first every time and Alexa goes second every time. Finding the distribution of wins between players when all the moves are random will be able to tell us if there's an advantage to starting first or second. There would need to be a significant variance in wins and losses.   
+
+#Formula for finding wins and losses from original data-frame. Will work for data-frames of any size. 
+library(dplyr)
+winner_counts <- b4b1000 %>% group_by(winner) %>% summarize(count = n())
+#View(winner_counts)
+library(ggplot2)
+#Plot showing distribution by counts
+ggplot(counts, aes(x = winner, y = count, fill = winner, width = 0.7)) + geom_bar(stat = "identity") + scale_fill_manual(values = c("alpha" = "black", "alexa" = "blue"))
+
+#Plot showing distribution by percentages. 
+counts$percentage <- prop.table(counts$count)*100
+ggplot(counts, aes(x = winner, y = percentage, fill = winner, width = 0.7)) + geom_bar(stat = "identity") + scale_fill_manual(values = c("alpha" = "black", "alexa" = "blue")) + ylab("Percentage")
+
+#The proportions of the graph are exactly the same since the sample size was 1000. 
+
+```
+
+
+
+```{r}
+#The second question to answer is what is the mean amount of rounds it takes to finish a game. 
+overall_mean_rounds <- b4b1000 %>% summarize(mean_rounds = mean(round))
+#view(overall_mean_rounds)
+round_counts <- b4b1000 %>% group_by(round) %>% summarize(count = n())
+
+
+#view(round_counts)
+total_count_of_rounds <- sum(round_counts$count)
+
+
+# I want to find the distribution of of rounds in a continuous line graph that shows the percentages of the amount of rounds that a game takes. 
+#first I need to convert all the rounds into percentages
+
+round_counts$percent <- round_counts$count / total_count_of_rounds * 100
+
+round_counts
+
+ggplot(data = round_counts, aes(x = round, y = percent)) +
+  geom_line() +
+  labs(x = "Round", y = "Percent") +
+  ggtitle("Distribution of Rounds by %")
+
+#The $ is used to access columns in the dataframe, I created the b4b1000$percentage by dividing the round column by the  sum of the round column and multiplying by 100.  
+
+```
+```{r}
+#This was me learning about how the events and the deckOfRolls were nested in the DF. Interesting if you want to see what they look like. 
+b4b1000_events_vector <- unlist(b4b1000$events)
+View(b4b1000_events_vector)
+b4b1000_deck_vector <- unlist(b4b1000$deckOfRoles)
+view(b4b1000_deck_vector)
+```
+```{r}
+#In order to help with future simulations, I was tasked with comparing the roles of one player at the start of the game to the roles at the end of the game. I need to compare these two columns and have a third column that will say true if the strings match and false if they don't. This is basically an if else statement that will yield True if the strings match and False if they don't. The column at the end is b4b1000$alpha_role_comparison, and b4b1000$alexa_role_comparison for each of the players. 
+
+#Since Chris is also a developer I'll be leaving this code here even though the current results are all true since his simulations aren't changing the roles from the beginning to the end. 
+
+b4b1000$alpha_role_comparison <- ifelse(b4b1000$players$alpha$role$role == b4b1000$seed$players$alpha$role$role, "True", "False")
+
+b4b1000$alexa_role_comparison <- ifelse(b4b1000$players$alexa$role$role == b4b1000$seed$players$alexa$role$role, "True", "False")
+
+#Code to plot the counts of true or false (currently all true) for Alexa
+alexa_roleswitch_counts <- table(b4b1000$alexa_role_comparison)
+
+alexa_roleswitch_counts_df <- data.frame(alexa_roleswitch_counts)
+
+colnames(alexa_roleswitch_counts_df) <- c("True or False", "Count")
+
+#For Alpha
+
+alpha_roleswitch_counts <- table(b4b1000$alpha_role_comparison)
+
+alpha_roleswitch_counts_df <- data.frame(alpha_roleswitch_counts)
+
+colnames(alpha_roleswitch_counts_df) <- c("True or False", "Count")
+
+
+
+ggplot(data = alexa_roleswitch_counts_df, aes(x = "True or False", y = Count, fill = "True or False" )) + 
+  geom_bar(stat = "identity") + 
+  ggtitle("Alexa Role Comparison") +
+  xlab("True or False")
+  ylab("Count")
+
+
+ggplot(data = alpha_roleswitch_counts_df, aes(x = "True or False", y = Count, fill = "True or False" )) + 
+  geom_bar(stat = "identity") + 
+  ggtitle("Alpha Role Comparison") +
+  xlab("True or False")
+  ylab("Count")
+
+
+```
+
+
+```{r}
+#On average how long does it take to simulate a game?
+#Looking for the difference between a game start and a game end. 
+#This is not as simple as it sounds since the format of these time stamps are as such "2023-01-19T05:06:02.384Z" where the only part I'm interested in is 02.384. 
+
+#library(stringr)
+
+# Extract the milliseconds, You can only run these bottom two lines ONCE, which is why they are commented out. If you run them again the positions of the string that I've chosen to isolate (milliseconds) have changed and it will take more of the original string in every new iteration. 
+
+b4b1000$gameStarted <- substr(b4b1000$gameStarted,nchar(b4b1000$gameStarted)-6,nchar(b4b1000$gameStarted)-1)
+b4b1000$gameEnded <- substr(b4b1000$gameEnded,nchar(b4b1000$gameEnded)-6,nchar(b4b1000$gameEnded)-1)
+
+#After Isolating the milliseconds I now need to convert this "Character" class into an "numeric" class in order to perform mathematical operations on the columns. If you change it to an integer it removes all digits after a . 
+#view(b4b1000$gameEnded)
+#view(b4b1000$gameStarted)
+
+b4b1000$gameStarted <- as.numeric(as.character(b4b1000$gameStarted))
+
+b4b1000$gameEnded <- as.numeric(as.character(b4b1000$gameEnded))
+
+#Check the class and make sure we're good. 
+
+
+#Calculate length of time in miliseconds that it takes to simulate a game and create a new column at the end called length_of_game_milli
+
+b4b1000$length_of_game_milli <- b4b1000$gameEnded - b4b1000$gameStarted
+
+#find the mean of the different lengths of the game. It is dependent on the length of rounds and events. Still very fast. 
+
+mean_length_of_game_in_milli <- mean(b4b1000$length_of_game_milli)
+
+view(mean_length_of_game_in_milli)
+
+view(b4b1000$length_of_game_milli)
+#view(b4b1000)
+
+#If for whatever reason this code doesn't work because of the reason mentioned at the top of this block, run the very first block at the top of the document and then come back and run this one again. It will work. 
+
+
+```
+
+```{r}
+#One of the more difficult questions to answer for this project is, what booties do players (Alexa and Alpha) have at the end of a match, and comparing that to a winning game vs. a losing game. The question we want to answer is (even though all of these games are randomly generated) is there a booty that contributes to people winning more than another?
+#I first need to create a dataframe for wins by player. One for alexa and one for alpha. I can later do a comparison of the losers as well. 
+#Filter out games by wins by Alexa. 
+
+winner_alexa <- filter(b4b1000, winner == "alexa")
+winner_alpha <- filter(b4b1000, winner == "alpha")
+```
+
+
+```{r}
+#winner_alexa_unnested <- winner_alexa %>% unnest(cols = c(winner_alexa[["players"]][["alexa"]][["booties"]]))
+#winner_alexa$players$alexa$booties
+
+#winner_alexa[["players"]][["alexa"]][["booties"]]
+
+#I needed to unlist this column and use the table function and turn every element in the list into a single string in order to count because the lists inside the column were of different lengths so I couldn't unnest them, I couldn't flatten them, I couldn't tally them, I couldn't make a table out of them, I couldn't change the name of the column to view them and I couldn't map them. This was a fun one to figure out XD 
+
+library(dplyr)
+alexas_win_booties <- table(unlist(winner_alexa$players$alexa$booties))
+alphas_win_booties <- table(unlist(winner_alpha$players$alpha$booties))
+
+alexas_loss_booties <- table(unlist(winner_alpha$players$alexa$booties))
+alphas_loss_booties <- table(unlist(winner_alexa$players$alpha$booties))
+
+#Tally of Alexas Booty After Alexa WON
+ggplot(data = as.data.frame(alexas_win_booties), aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() +
+  scale_fill_manual(values = c("AMULET" = "blue", "COMPASS" = "yellow", "CUTLASS" = "purple", "DICE" = "red", "HELM" = "orange", "RING" = "pink", "SPYGLASS" = "green")) +
+  labs(x = "Booties", y = "Count", fill = "Booties")+
+  ggtitle("Alexa's WIN Booties Tally")
+
+#Tally of Alphas Booty After Alpha WON
+
+ggplot(data = as.data.frame(alphas_win_booties), aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() +
+  scale_fill_manual(values = c("AMULET" = "blue", "COMPASS" = "yellow", "CUTLASS" = "purple", "DICE" = "red", "HELM" = "orange", "RING" = "pink", "SPYGLASS" = "green")) +
+  labs(x = "Booties", y = "Count", fill = "Booties")+
+  ggtitle("Alpha's WIN Booties Tally")
+
+#Tally of Alexas Booty After Alpha WON
+
+ggplot(data = as.data.frame(alexas_loss_booties), aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() +
+  scale_fill_manual(values = c("AMULET" = "blue", "COMPASS" = "yellow", "CUTLASS" = "purple", "DICE" = "red", "HELM" = "orange", "RING" = "pink", "SPYGLASS" = "green")) +
+  labs(x = "Booties", y = "Count", fill = "Booties")+
+  ggtitle("Alexa's LOSS Booties Tally")
+
+#Tally of Alphas Booty After Alexa WON
+
+ggplot(data = as.data.frame(alphas_loss_booties), aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() +
+  scale_fill_manual(values = c("AMULET" = "blue", "COMPASS" = "yellow", "CUTLASS" = "purple", "DICE" = "red", "HELM" = "orange", "RING" = "pink", "SPYGLASS" = "green")) +
+  labs(x = "Booties", y = "Count", fill = "Booties")+
+  ggtitle("Alpha's LOSS Booties Tally")
+
+
+#I think it would also be interesting to know if there was a booty that led to more losses compared to others. I will use the opposite logic while filtering data to do this. 
+
+```
+
+```{r}
+#How many events on average are there per game? 
+#Check events. My computer almost exploded when I tried to unnest the 1000 dataframes that contain all of the events of all of the events. I have to upload the b4b10 in order to get this answer. 
+
+b4b10 <- fromJSON("C:\\Users\\Owner\\OneDrive\\Desktop\\b4b_Project\\b4b-10.json")
+
+#Discovered the lapply function while trying to unnest this mass of data. It's called the identity function (which simply returns the dataframe inputs) to each element of the list. It returns a list where each element is the data in the corresponding row of the "events" column. I checked the class and each element/variable is a dataframe.
+#This is an example of how deeply nested some of the data is (check_events[[1]]$payload$seed$players$alpha$role) The data for the role of this particular event at the start of the game is 8 layers deep and every step before the role was a dataframe. 
+
+#In order to find the total amount of events I need to count the total amount of rows in each of the dataframes. There are 10 in the b4b10 dataframe, but you can upload another larger df and use the same function to get the total and the mean number of events. 
+
+check_events <- lapply(b4b10$events, function(x) x)
+#Function that counts the number of rows in each df
+event_counts <- lapply(check_events, nrow)
+#function that adds up the number of rows in each df
+total_event_counts <- sum(as.numeric(event_counts))
+#function that divides that sum by the total amount of dataframes (10). Would need to change number when df size changes. 
+mean_event_counts <- sum(as.numeric(event_counts)) / 10
+total_event_counts
+mean_event_counts
+#check_events[[2]]
+
+```
+```{r}
+#Distribution of different game events.
+check_events <- lapply(b4b10$events, function(x) x)
+
+#Needed to turn the df into a table to get the count. 
+event_type_count <- table(unlist(check_events[[1]]$type))
+
+
+#Needed to turn the table back into a dataframe to remove a few columns that skewed the results. Turn Started and Ended, and Game started/ended
+event_type_count_filtered <- as.data.frame(event_type_count) %>% filter(Var1 != "Turn Started" & Var1 != "Turn Ended" & Var1 != "Game Ended" & Var1 != "Game Started")
+
+ggplot(data = as.data.frame(event_type_count_filtered), aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() +
+  scale_fill_brewer(palette = "Set1")+
+  labs(x = "Event Type", y = "Count", fill = "Event Type")+
+  ggtitle("Event Type Distribution for Game 1")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+
+
+#check_events
+
+```
+```{r}
+#Same as above, but for all of the games and all of the different events in each dataframe. 
+
+event_type_counts <- lapply(check_events, function(x) table(unlist(x$type)))
+
+#Needed to make a combined table to be able to add up all of the different events. 
+combined_table <- do.call(rbind, event_type_counts)
+
+#needed to turn table into a dataframe too look at it and manipulate it. 
+combined_table_df <- as.data.frame(combined_table)
+
+#Removed the columns that didn't add value to the chart. You can comment this out to get the regular DF back. 
+
+combined_table_df <- combined_table_df %>% select(-"Turn Started", -"Turn Ended", -"Game Ended", -"Game Started")
+
+#combined_table_df
+#Needed to melt the dataframe into a long format to plot it more easily. 
+library(reshape2)
+melt_combined_table_df <- melt(combined_table_df)
+
+
+ggplot(data = melt_combined_table_df %>% group_by(variable) %>% summarize(sum=sum(value)), aes(x=variable, y=sum, color=variable, fill=variable))+
+  geom_col()+
+  labs(x = "All Events", y = "Count")+
+  ggtitle("Event Type Distribution for ALL Games")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
